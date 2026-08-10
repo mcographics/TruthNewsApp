@@ -46,6 +46,30 @@ try {
   await page.waitForSelector('.dashboard-grid', { timeout: 45_000 })
   assert.match(await page.locator('.hero-copy h1').innerText(), /TRUTH\s+STANDS\s+FOREVER/)
 
+  const brandBounds = await page.evaluate(() => {
+    const sidebar = document.querySelector('.sidebar')?.getBoundingClientRect()
+    const titleElement = document.querySelector('.brand strong')
+    const subtitleElement = document.querySelector('.brand > div:last-child > span')
+    const title = titleElement?.getBoundingClientRect()
+    const subtitle = subtitleElement?.getBoundingClientRect()
+    const textColumn = document.querySelector('.brand > div:last-child')
+    return sidebar && title && subtitle && textColumn && titleElement && subtitleElement ? {
+      sidebarRight: sidebar.right,
+      titleRight: title.right,
+      subtitleRight: subtitle.right,
+      textClientWidth: textColumn.clientWidth,
+      textScrollWidth: textColumn.scrollWidth,
+      titleScrollWidth: titleElement.scrollWidth,
+      subtitleScrollWidth: subtitleElement.scrollWidth
+    } : null
+  })
+  assert.ok(brandBounds, 'Expected the expanded sidebar brand to be visible')
+  assert.ok(brandBounds.titleRight < brandBounds.sidebarRight, `Brand title overlaps sidebar divider: ${JSON.stringify(brandBounds)}`)
+  assert.ok(brandBounds.subtitleRight < brandBounds.sidebarRight, `Brand subtitle overlaps sidebar divider: ${JSON.stringify(brandBounds)}`)
+  assert.ok(brandBounds.textScrollWidth <= brandBounds.textClientWidth, `Brand text is clipped: ${JSON.stringify(brandBounds)}`)
+  assert.ok(brandBounds.titleScrollWidth <= brandBounds.textClientWidth, `Brand title is clipped: ${JSON.stringify(brandBounds)}`)
+  assert.ok(brandBounds.subtitleScrollWidth <= brandBounds.textClientWidth, `Brand subtitle is clipped: ${JSON.stringify(brandBounds)}`)
+
   const restoredWindow = await page.evaluate(async () => ({
     state: await window.truthNews.getWindowState(),
     radius: getComputedStyle(document.querySelector('.app-shell')).borderTopLeftRadius
