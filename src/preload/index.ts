@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { TruthNewsApi } from '../shared/types'
+import type { TruthNewsApi, WindowState } from '../shared/types'
 
 const api: TruthNewsApi = {
   getBootstrap: () => ipcRenderer.invoke('truth:get-bootstrap'),
@@ -20,10 +20,16 @@ const api: TruthNewsApi = {
   openExternal: (url) => ipcRenderer.invoke('truth:open-external', url),
   copyText: (text) => ipcRenderer.invoke('truth:copy-text', text),
   getTime: () => ipcRenderer.invoke('truth:get-time'),
+  getWindowState: () => ipcRenderer.invoke('truth:get-window-state'),
   onNewsUpdated: (callback) => {
     const listener = (): void => callback()
     ipcRenderer.on('truth:news-updated', listener)
     return () => ipcRenderer.removeListener('truth:news-updated', listener)
+  },
+  onWindowState: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: WindowState): void => callback({ maximized: Boolean(state?.maximized) })
+    ipcRenderer.on('truth:window-state', listener)
+    return () => ipcRenderer.removeListener('truth:window-state', listener)
   }
 }
 

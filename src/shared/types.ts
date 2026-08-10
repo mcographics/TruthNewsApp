@@ -190,6 +190,10 @@ export interface SyncStatus {
   message: string
 }
 
+export interface WindowState {
+  maximized: boolean
+}
+
 export interface BootstrapData {
   events: TimelineEvent[]
   prophecies: ProphecyRecord[]
@@ -244,5 +248,7 @@ export interface TruthNewsApi {
   openExternal: (url: string) => Promise<boolean>
   copyText: (text: string) => Promise<boolean>
   getTime: () => Promise<{ local: string; utc: string; timezone: string; iso: string }>
+  getWindowState: () => Promise<WindowState>
   onNewsUpdated: (callback: () => void) => () => void
+  onWindowState: (callback: (state: WindowState) => void) => () => void
 }

@@ -1,4 +1,4 @@
-import { clipboard, ipcMain, net, shell } from 'electron'
+import { BrowserWindow, clipboard, ipcMain, net, shell } from 'electron'
 import type { AppSettings, BookmarkInput, NoteInput, ThemeMode } from '../shared/types'
 import { database } from './database'
 import { refreshNewsFeeds } from './newsService'
@@ -33,6 +33,10 @@ const validateSettingsPatch = (value: unknown): Partial<AppSettings> => {
 }
 
 export const registerIpcHandlers = (onSettingsUpdated: () => void = () => undefined): void => {
+  ipcMain.handle('truth:get-window-state', (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    return { maximized: Boolean(window?.isMaximized() || window?.isFullScreen()) }
+  })
   ipcMain.handle('truth:get-bootstrap', () => database.getBootstrap(net.isOnline()))
   ipcMain.handle('truth:refresh-news', () => refreshNewsFeeds(net.isOnline()))
   ipcMain.handle('truth:search', (_event, query: unknown) => database.search(stringValue(query, 160)))

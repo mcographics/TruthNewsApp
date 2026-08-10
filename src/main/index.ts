@@ -1,12 +1,39 @@
 import { app, BrowserWindow, net, shell } from 'electron'
+import { release } from 'node:os'
 import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { database } from './database'
 import { registerIpcHandlers } from './ipc'
 import { refreshNewsFeeds } from './newsService'
+import { createRoundedRectangleShape, WINDOW_CORNER_RADIUS } from './windowShape'
 
 let mainWindow: BrowserWindow | null = null
 let newsTimer: NodeJS.Timeout | null = null
+let windowShapeTimer: NodeJS.Timeout | null = null
+
+const windowsBuild = Number.parseInt(release().split('.')[2] ?? '', 10)
+const needsLegacyRoundedShape = process.platform === 'win32' && Number.isFinite(windowsBuild) && windowsBuild < 22_000
+
+const synchronizeWindowAppearance = (): void => {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const maximized = mainWindow.isMaximized() || mainWindow.isFullScreen()
+
+  if (!mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('truth:window-state', { maximized })
+  if (!needsLegacyRoundedShape) return
+
+  if (maximized) {
+    mainWindow.setShape([])
+    return
+  }
+
+  const [width, height] = mainWindow.getSize()
+  mainWindow.setShape(createRoundedRectangleShape(width, height, WINDOW_CORNER_RADIUS))
+}
+
+const scheduleWindowAppearance = (): void => {
+  if (windowShapeTimer) clearTimeout(windowShapeTimer)
+  windowShapeTimer = setTimeout(synchronizeWindowAppearance, 16)
+}
 
 const notifyNewsUpdated = (): void => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('truth:news-updated')
@@ -32,6 +59,9 @@ const createWindow = (): void => {
     backgroundColor: '#05090c',
     title: 'TruthNewsApp',
     icon: is.dev ? join(process.cwd(), 'build', 'icon.png') : join(process.resourcesPath, 'icon.png'),
+    roundedCorners: true,
+    thickFrame: true,
+    hasShadow: true,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: '#05090c',
@@ -48,7 +78,20 @@ const createWindow = (): void => {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('ready-to-show', () => {
+    synchronizeWindowAppearance()
+    mainWindow?.show()
+  })
+  mainWindow.on('resize', scheduleWindowAppearance)
+  mainWindow.on('maximize', synchronizeWindowAppearance)
+  mainWindow.on('unmaximize', synchronizeWindowAppearance)
+  mainWindow.on('enter-full-screen', synchronizeWindowAppearance)
+  mainWindow.on('leave-full-screen', synchronizeWindowAppearance)
+  mainWindow.on('closed', () => {
+    if (windowShapeTimer) clearTimeout(windowShapeTimer)
+    windowShapeTimer = null
+    mainWindow = null
+  })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const parsed = new URL(url)

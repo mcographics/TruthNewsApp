@@ -28,6 +28,11 @@
   --shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
   --serif: Georgia, "Times New Roman", serif;
   --sidebar-width: 232px;
+  --radius-window: 18px;
+  --radius-panel: 14px;
+  --radius-card: 12px;
+  --radius-control: 10px;
+  --radius-compact: 8px;
 }
 
 :root[data-theme="white-gold"] {
@@ -53,8 +58,8 @@
 }
 
 * { box-sizing: border-box; }
-html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-body { background: var(--bg); color: var(--text); font-size: 14px; }
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+body { color: var(--text); font-size: 14px; }
 button, input, select, textarea { font: inherit; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
@@ -65,7 +70,8 @@ button { border: 0; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--line) 75%, var(--gold) 25%); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
 
-.app-shell { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); grid-template-rows: 88px minmax(0, 1fr) 72px; width: 100%; height: 100%; background: radial-gradient(circle at 60% 0%, rgba(168, 108, 18, .04), transparent 35%), var(--bg); }
+.app-shell { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); grid-template-rows: 88px minmax(0, 1fr) 72px; width: 100%; height: 100%; overflow: hidden; border: 1px solid var(--line-gold); border-radius: var(--radius-window); background: radial-gradient(circle at 60% 0%, rgba(168, 108, 18, .04), transparent 35%), var(--bg); box-shadow: inset 0 0 0 1px rgba(255,255,255,.025); }
+.app-shell.window-is-maximized { border-color: transparent; border-radius: 0; box-shadow: none; }
 .app-shell.sidebar-is-collapsed { --sidebar-width: 78px; }
 .app-content { grid-column: 2; grid-row: 2; overflow: auto; padding: 12px; position: relative; }
 
@@ -558,6 +564,68 @@ select { min-height: 34px; color: var(--text); background: var(--panel-2); borde
 .loading-screen { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(circle at 50% 45%, rgba(227,169,47,.08), transparent 24%), var(--bg); color: var(--muted); }
 .brand-loader { width: 94px; height: 94px; display: grid; place-items: center; border: 1px solid var(--line-gold); border-radius: 50%; color: var(--gold); box-shadow: 0 0 35px rgba(227,169,47,.08); }
 .brand-loader .initial-letter { font: 72px "EB Initials", var(--serif); }
+
+/* Shared corner language: window, surfaces, cards, then interactive controls. */
+.panel,
+.hero-panel,
+.feature-card,
+.page-header,
+.connection-banner,
+.news-card,
+.timeline-viewport,
+.prophecy-timeline,
+.bible-reader,
+.bible-results,
+.translation-loading,
+.prophecy-card,
+.dispensation-section,
+.source-card,
+.bookmark-list article,
+.media-grid article { border-radius: var(--radius-panel); }
+
+.sidebar-verse,
+.headline-thumb,
+.jesus-card,
+.dashboard-meta > div,
+.date-engine-note,
+.translation-chip,
+.classification-rule,
+.framework-warning,
+.source-count,
+.privacy-chip,
+.timeline-event,
+.prophecy-timeline-card,
+.timeline-legend > div,
+.dispensation-sequence button,
+.relevance-panel,
+.confirm-danger,
+.error-state,
+.inline-error,
+.bible-license { border-radius: var(--radius-card); }
+
+.nav-item,
+.collapse-button,
+.global-search,
+.search-results,
+.search-results > button,
+.popover,
+.gold-button,
+.danger-button,
+.feature-card button,
+.inline-search,
+.news-controls > label,
+select,
+textarea,
+.bookmark-button,
+.timeline-search,
+.zoom-control,
+.source-link,
+.evidence-chain section,
+.theme-options button { border-radius: var(--radius-control); }
+
+.bible-search { overflow: hidden; border-radius: var(--radius-control); }
+.bible-search .gold-button { border-radius: 0 var(--radius-control) var(--radius-control) 0; }
+.detail-drawer { border-radius: var(--radius-panel) 0 0 var(--radius-panel); }
 
 @media (max-width: 1450px) {
   .topbar { padding-right: 145px; }

@@ -27,6 +27,19 @@ try {
   await page.waitForSelector('.dashboard-grid', { timeout: 45_000 })
   assert.match(await page.locator('.hero-copy h1').innerText(), /TRUTH\s+STANDS\s+FOREVER/)
 
+  const restoredWindow = await page.evaluate(async () => ({
+    state: await window.truthNews.getWindowState(),
+    radius: getComputedStyle(document.querySelector('.app-shell')).borderTopLeftRadius
+  }))
+  assert.deepEqual(restoredWindow.state, { maximized: false })
+  assert.equal(restoredWindow.radius, '18px')
+
+  await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].maximize())
+  await page.waitForFunction(() => document.querySelector('.app-shell')?.classList.contains('window-is-maximized'))
+  assert.equal(await page.locator('.app-shell').evaluate((element) => getComputedStyle(element).borderTopLeftRadius), '0px')
+  await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].unmaximize())
+  await page.waitForFunction(() => !document.querySelector('.app-shell')?.classList.contains('window-is-maximized'))
+
   const destinations = [
     ['News Feed', 'News Feed'],
     ['Master Timeline', 'Global Master Timeline'],
