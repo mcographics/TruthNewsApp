@@ -250,5 +250,6 @@ export interface TruthNewsApi {
   getTime: () => Promise<{ local: string; utc: string; timezone: string; iso: string }>
   getWindowState: () => Promise<WindowState>
   onNewsUpdated: (callback: () => void) => () => void
+  onStartupRelease: (callback: () => void) => () => void
   onWindowState: (callback: (state: WindowState) => void) => () => void
 }

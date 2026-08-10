@@ -26,6 +26,11 @@ const api: TruthNewsApi = {
     ipcRenderer.on('truth:news-updated', listener)
     return () => ipcRenderer.removeListener('truth:news-updated', listener)
   },
+  onStartupRelease: (callback) => {
+    const listener = (): void => callback()
+    ipcRenderer.on('truth:startup-release', listener)
+    return () => ipcRenderer.removeListener('truth:startup-release', listener)
+  },
   onWindowState: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, state: WindowState): void => callback({ maximized: Boolean(state?.maximized) })
     ipcRenderer.on('truth:window-state', listener)

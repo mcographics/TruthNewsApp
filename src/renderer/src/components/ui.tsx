@@ -1,5 +1,6 @@
 import { Bookmark, BookmarkCheck, ChevronRight, CircleAlert, FileQuestion, LoaderCircle, X } from 'lucide-react'
 import type { BookmarkInput, HistoricalConfidence, ProphecyClassification } from '../../../shared/types'
+import loadingCross from '../assets/cross.png'
 import { useApp } from '../context/AppContext'
 import type { ReactNode } from 'react'
 
@@ -38,7 +39,7 @@ export const ErrorState = ({ message, retry }: { message: string; retry?: () => 
 )
 
 export const LoadingScreen = (): React.JSX.Element => (
-  <div className="loading-screen"><div className="brand-loader"><span className="initial-letter">T</span></div><LoaderCircle className="spin" size={26} /><p>Preparing Scripture, history, and local data…</p></div>
+  <div className="loading-screen"><img className="loading-cross" src={loadingCross} alt="Illuminated cross" /><div className="loading-caption"><LoaderCircle className="spin" size={22} /><p>Preparing Scripture, history, prophecy, and news…</p></div></div>
 )
 
 export const DetailDrawer = ({ title, subtitle, children, onClose }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void }): React.JSX.Element => (

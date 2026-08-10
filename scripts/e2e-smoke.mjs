@@ -7,6 +7,8 @@ import { _electron as electron } from 'playwright-core'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packagedExecutable = process.env.TRUTHNEWS_EXECUTABLE
+const splashScreenshotPath = resolve(root, 'artifacts', packagedExecutable ? 'truthnews-splash-packaged.png' : 'truthnews-splash-e2e.png')
+const loadingScreenshotPath = resolve(root, 'artifacts', packagedExecutable ? 'truthnews-cross-loading-packaged.png' : 'truthnews-cross-loading-e2e.png')
 const screenshotPath = resolve(root, 'artifacts', packagedExecutable ? 'truthnews-packaged.png' : 'truthnews-e2e.png')
 const bibleScreenshotPath = resolve(root, 'artifacts', packagedExecutable ? 'truthnews-bible-packaged.png' : 'truthnews-bible-e2e.png')
 const facsimileScreenshotPath = resolve(root, 'artifacts', packagedExecutable ? 'truthnews-geneva-packaged.png' : 'truthnews-geneva-e2e.png')
@@ -23,7 +25,24 @@ const electronApp = await electron.launch({
 })
 
 try {
-  const page = await electronApp.firstWindow()
+  const firstPage = await electronApp.firstWindow()
+  const firstPageIsSplash = /TruthNewsApp — Loading/.test(await firstPage.title())
+  assert.equal(firstPageIsSplash, true)
+  await firstPage.locator('.splash-screen img[alt="TruthNewsApp"]').waitFor({ timeout: 10_000 })
+  await firstPage.waitForFunction(() => {
+    const image = document.querySelector('.splash-screen img')
+    return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0
+  })
+  await firstPage.screenshot({ path: splashScreenshotPath })
+
+  const existingMainWindow = electronApp.windows().find((candidate) => candidate !== firstPage && !candidate.isClosed())
+  const page = existingMainWindow || await electronApp.waitForEvent('window', { timeout: 45_000 })
+  await page.locator('.loading-cross[alt="Illuminated cross"]').waitFor({ timeout: 10_000 })
+  await page.waitForFunction(() => {
+    const image = document.querySelector('.loading-cross')
+    return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0
+  })
+  await page.screenshot({ path: loadingScreenshotPath })
   await page.waitForSelector('.dashboard-grid', { timeout: 45_000 })
   assert.match(await page.locator('.hero-copy h1').innerText(), /TRUTH\s+STANDS\s+FOREVER/)
 
@@ -125,7 +144,7 @@ try {
     }
   })
   assert.deepEqual(security, { contextIsolation: true, nodeIntegration: false, sandbox: true })
-  console.log(JSON.stringify({ ok: true, verseCount, security, screenshotPath, bibleScreenshotPath, facsimileScreenshotPath }, null, 2))
+  console.log(JSON.stringify({ ok: true, verseCount, security, splashScreenshotPath, loadingScreenshotPath, screenshotPath, bibleScreenshotPath, facsimileScreenshotPath }, null, 2))
 } finally {
   await electronApp.close()
 }

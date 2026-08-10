@@ -66,6 +66,14 @@
         "to": "icon.png"
       },
       {
+        "from": "src/renderer/src/assets/logo-splash.png",
+        "to": "logo-splash.png"
+      },
+      {
+        "from": "src/renderer/src/assets/splash.html",
+        "to": "splash.html"
+      },
+      {
         "from": "EB-Garamond-Initials/COPYING",
         "to": "licenses/EB-Garamond-Initials-OFL-1.1.txt"
       },

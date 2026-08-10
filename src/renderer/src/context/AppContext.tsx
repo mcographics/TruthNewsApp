@@ -46,6 +46,7 @@ export const AppProvider = ({ children }: { children: ReactNode }): React.JSX.El
   const [bibleBooks, setBibleBooks] = useState<BibleBook[]>([])
   const [bibleTranslations, setBibleTranslations] = useState<BibleTranslation[]>([])
   const [loading, setLoading] = useState(true)
+  const [startupReleased, setStartupReleased] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -65,7 +66,12 @@ export const AppProvider = ({ children }: { children: ReactNode }): React.JSX.El
 
   useEffect(() => {
     void reload()
-    return window.truthNews.onNewsUpdated(() => void reload())
+    const removeNewsListener = window.truthNews.onNewsUpdated(() => void reload())
+    const removeStartupListener = window.truthNews.onStartupRelease(() => setStartupReleased(true))
+    return () => {
+      removeNewsListener()
+      removeStartupListener()
+    }
   }, [reload])
 
   useEffect(() => {
@@ -151,9 +157,9 @@ export const AppProvider = ({ children }: { children: ReactNode }): React.JSX.El
   ), [data.bookmarks])
 
   const value = useMemo<AppContextValue>(() => ({
-    ...data, loading, syncing, error, bibleBooks, bibleTranslations, refreshNews, toggleBookmark, saveNote, updateSettings, updateSource,
+    ...data, loading: loading || !startupReleased, syncing, error, bibleBooks, bibleTranslations, refreshNews, toggleBookmark, saveNote, updateSettings, updateSource,
     clearNews, clearActivity, resetLocalData, reload, isBookmarked
-  }), [data, loading, syncing, error, bibleBooks, bibleTranslations, refreshNews, toggleBookmark, saveNote, updateSettings, updateSource, clearNews, clearActivity, resetLocalData, reload, isBookmarked])
+  }), [data, loading, startupReleased, syncing, error, bibleBooks, bibleTranslations, refreshNews, toggleBookmark, saveNote, updateSettings, updateSource, clearNews, clearActivity, resetLocalData, reload, isBookmarked])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

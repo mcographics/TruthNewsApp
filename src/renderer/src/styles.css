@@ -561,10 +561,10 @@ select { min-height: 34px; color: var(--text); background: var(--panel-2); borde
 .error-state svg { color: var(--danger); }
 .error-state div { flex: 1; }
 .error-state p { margin: 2px 0 0; color: var(--text-soft); }
-.loading-screen { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(circle at 50% 45%, rgba(227,169,47,.08), transparent 24%), var(--bg); color: var(--muted); }
-.brand-loader { width: 94px; height: 94px; display: grid; place-items: center; border: 1px solid var(--line-gold); border-radius: 50%; color: var(--gold); box-shadow: 0 0 35px rgba(227,169,47,.08); }
-.brand-loader .initial-letter { font: 72px "EB Initials", var(--serif); }
-
+.loading-screen { position: relative; width: 100%; height: 100%; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--line-gold); border-radius: var(--radius-window); background: radial-gradient(circle at 50% 45%, rgba(227,169,47,.08), transparent 30%), var(--bg); color: var(--muted); }
+.loading-screen > .loading-cross { display: block; width: auto; height: auto; max-width: min(384px, 41vw); max-height: 41vh; object-fit: contain; border: 1px solid var(--line-gold); border-radius: var(--radius-panel); box-shadow: 0 28px 80px rgba(0,0,0,.48); }
+.loading-caption { position: absolute; left: 50%; bottom: max(28px, 5vh); display: flex; align-items: center; gap: 10px; padding: 10px 16px; border: 1px solid var(--line-gold); border-radius: 100px; background: color-mix(in srgb, var(--panel) 90%, transparent); box-shadow: var(--shadow); backdrop-filter: blur(12px); transform: translateX(-50%); }
+.loading-caption p { margin: 0; white-space: nowrap; color: var(--text-soft); font-size: 12px; }
 /* Shared corner language: window, surfaces, cards, then interactive controls. */
 .panel,
 .hero-panel,

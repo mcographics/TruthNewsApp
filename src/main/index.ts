@@ -8,9 +8,16 @@ import { refreshNewsFeeds } from './newsService'
 import { createRoundedRectangleShape, WINDOW_CORNER_RADIUS } from './windowShape'
 
 let mainWindow: BrowserWindow | null = null
+let splashWindow: BrowserWindow | null = null
 let newsTimer: NodeJS.Timeout | null = null
 let windowShapeTimer: NodeJS.Timeout | null = null
+let startupReleaseTimer: NodeJS.Timeout | null = null
+let splashShownAt = 0
 
+const SPLASH_WIDTH = 768
+const SPLASH_HEIGHT = 512
+const MINIMUM_SPLASH_DURATION_MS = 5_000
+const MINIMUM_MAIN_LOADING_DURATION_MS = 1_250
 const windowsBuild = Number.parseInt(release().split('.')[2] ?? '', 10)
 const needsLegacyRoundedShape = process.platform === 'win32' && Number.isFinite(windowsBuild) && windowsBuild < 22_000
 
@@ -33,6 +40,49 @@ const synchronizeWindowAppearance = (): void => {
 const scheduleWindowAppearance = (): void => {
   if (windowShapeTimer) clearTimeout(windowShapeTimer)
   windowShapeTimer = setTimeout(synchronizeWindowAppearance, 16)
+}
+
+const createSplashWindow = (): Promise<void> => {
+  const splashDocumentPath = is.dev
+    ? join(process.cwd(), 'src', 'renderer', 'src', 'assets', 'splash.html')
+    : join(process.resourcesPath, 'splash.html')
+
+  splashWindow = new BrowserWindow({
+    width: SPLASH_WIDTH,
+    height: SPLASH_HEIGHT,
+    show: false,
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: true,
+    roundedCorners: true,
+    backgroundColor: '#05090c',
+    title: 'TruthNewsApp — Loading',
+    icon: is.dev ? join(process.cwd(), 'build', 'icon.png') : join(process.resourcesPath, 'icon.png'),
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true
+    }
+  })
+
+  splashWindow.on('closed', () => { splashWindow = null })
+  splashWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  splashWindow.webContents.on('will-navigate', (event) => event.preventDefault())
+
+  return new Promise((resolve, reject) => {
+    splashWindow?.once('ready-to-show', () => {
+      if (!splashWindow || splashWindow.isDestroyed()) return
+      if (needsLegacyRoundedShape) splashWindow.setShape(createRoundedRectangleShape(SPLASH_WIDTH, SPLASH_HEIGHT, 24))
+      splashWindow.show()
+      splashShownAt = Date.now()
+      resolve()
+    })
+    void splashWindow?.loadFile(splashDocumentPath).catch(reject)
+  })
 }
 
 const notifyNewsUpdated = (): void => {
@@ -78,9 +128,17 @@ const createWindow = (): void => {
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
+  mainWindow.once('ready-to-show', () => {
     synchronizeWindowAppearance()
     mainWindow?.show()
+    splashWindow?.close()
+    if (startupReleaseTimer) clearTimeout(startupReleaseTimer)
+    startupReleaseTimer = setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send('truth:startup-release')
+      }
+      startupReleaseTimer = null
+    }, MINIMUM_MAIN_LOADING_DURATION_MS)
   })
   mainWindow.on('resize', scheduleWindowAppearance)
   mainWindow.on('maximize', synchronizeWindowAppearance)
@@ -89,7 +147,9 @@ const createWindow = (): void => {
   mainWindow.on('leave-full-screen', synchronizeWindowAppearance)
   mainWindow.on('closed', () => {
     if (windowShapeTimer) clearTimeout(windowShapeTimer)
+    if (startupReleaseTimer) clearTimeout(startupReleaseTimer)
     windowShapeTimer = null
+    startupReleaseTimer = null
     mainWindow = null
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -116,7 +176,11 @@ const createWindow = (): void => {
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.mcographics.truthnewsapp')
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
+  await createSplashWindow()
   await database.initialize()
+  const elapsedSplashTime = splashShownAt ? Date.now() - splashShownAt : 0
+  const remainingSplashTime = Math.max(0, MINIMUM_SPLASH_DURATION_MS - elapsedSplashTime)
+  if (remainingSplashTime) await new Promise((resolve) => setTimeout(resolve, remainingSplashTime))
   registerIpcHandlers(scheduleNewsUpdates)
   createWindow()
   scheduleNewsUpdates()
