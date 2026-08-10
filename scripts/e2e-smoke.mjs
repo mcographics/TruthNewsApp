@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, rm } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import electronPath from 'electron'
@@ -7,19 +7,22 @@ import { _electron as electron } from 'playwright-core'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packagedExecutable = process.env.TRUTHNEWS_EXECUTABLE
+const profilePath = resolve(root, 'artifacts', packagedExecutable ? 'packaged-profile-0.2.0' : 'e2e-profile')
 const splashScreenshotPath = resolve(root, 'artifacts', packagedExecutable ? 'truthnews-splash-packaged.png' : 'truthnews-splash-e2e.png')
 const loadingScreenshotPath = resolve(root, 'artifacts', packagedExecutable ? 'truthnews-cross-loading-packaged.png' : 'truthnews-cross-loading-e2e.png')
 const screenshotPath = resolve(root, 'artifacts', packagedExecutable ? 'truthnews-packaged.png' : 'truthnews-e2e.png')
 const bibleScreenshotPath = resolve(root, 'artifacts', packagedExecutable ? 'truthnews-bible-packaged.png' : 'truthnews-bible-e2e.png')
 const facsimileScreenshotPath = resolve(root, 'artifacts', packagedExecutable ? 'truthnews-geneva-packaged.png' : 'truthnews-geneva-e2e.png')
 await mkdir(dirname(screenshotPath), { recursive: true })
+await rm(profilePath, { recursive: true, force: true })
+await mkdir(profilePath, { recursive: true })
 
 const launchEnv = { ...process.env }
 delete launchEnv.ELECTRON_RUN_AS_NODE
 
 const electronApp = await electron.launch({
   executablePath: packagedExecutable || electronPath,
-  args: packagedExecutable ? [`--user-data-dir=${resolve(root, 'artifacts', 'packaged-profile-0.2.0')}`] : ['.'],
+  args: packagedExecutable ? [`--user-data-dir=${profilePath}`] : ['.', `--user-data-dir=${profilePath}`],
   cwd: root,
   env: launchEnv
 })
@@ -46,13 +49,20 @@ try {
   await page.waitForSelector('.dashboard-grid', { timeout: 45_000 })
   assert.match(await page.locator('.hero-copy h1').innerText(), /TRUTH\s+STANDS\s+FOREVER/)
 
+  const darkTheme = await page.evaluate(() => {
+    const rootStyle = getComputedStyle(document.documentElement)
+    const backgroundImages = ['.app-shell', '.sidebar', '.panel', '.nav-item.active'].map((selector) => getComputedStyle(document.querySelector(selector)).backgroundImage)
+    return { background: rootStyle.getPropertyValue('--bg').trim(), panel: rootStyle.getPropertyValue('--panel').trim(), backgroundImages }
+  })
+  assert.deepEqual(darkTheme, { background: '#080808', panel: '#111111', backgroundImages: ['none', 'none', 'none', 'none'] })
+
   const brandBounds = await page.evaluate(() => {
     const sidebar = document.querySelector('.sidebar')?.getBoundingClientRect()
     const titleElement = document.querySelector('.brand strong')
-    const subtitleElement = document.querySelector('.brand > div:last-child > span')
+    const subtitleElement = document.querySelector('.brand-copy > span')
     const title = titleElement?.getBoundingClientRect()
     const subtitle = subtitleElement?.getBoundingClientRect()
-    const textColumn = document.querySelector('.brand > div:last-child')
+    const textColumn = document.querySelector('.brand-copy')
     return sidebar && title && subtitle && textColumn && titleElement && subtitleElement ? {
       sidebarRight: sidebar.right,
       titleRight: title.right,
@@ -101,6 +111,18 @@ try {
   for (const [linkName, heading] of destinations) {
     await page.getByRole('link', { name: linkName, exact: true }).click()
     await page.getByRole('heading', { name: heading, exact: true }).waitFor({ timeout: 10_000 })
+    if (linkName === 'Bible Timeline') {
+      const categories = await page.locator('.timeline-event .event-category').allInnerTexts()
+      assert.ok(categories.length > 0 && categories.every((category) => ['bible', 'jesus christ', 'church history'].includes(category.toLowerCase())), `Unexpected Bible timeline categories: ${categories.join(', ')}`)
+    }
+    if (linkName === 'History Timeline') {
+      const categories = await page.locator('.timeline-event .event-category').allInnerTexts()
+      assert.ok(categories.length > 0 && categories.every((category) => ['world history', 'israel', 'church history'].includes(category.toLowerCase())), `Unexpected history timeline categories: ${categories.join(', ')}`)
+    }
+    if (linkName === 'Jesus Christ') {
+      const categories = await page.locator('.timeline-event .event-category').allInnerTexts()
+      assert.ok(categories.length > 0 && categories.every((category) => category.toLowerCase() === 'jesus christ'), `Unexpected Jesus timeline categories: ${categories.join(', ')}`)
+    }
   }
 
   await page.getByRole('link', { name: 'Bible', exact: true }).click()
@@ -108,7 +130,7 @@ try {
   await page.getByRole('combobox', { name: 'Bible translation' }).selectOption('WEB')
   await page.getByRole('combobox', { name: 'Bible book' }).selectOption('JOH')
   await page.getByRole('combobox', { name: 'Bible chapter' }).selectOption('3')
-  await page.waitForFunction(() => document.querySelectorAll('.chapter-text button').length >= 30)
+  await page.waitForFunction(() => document.querySelector('.bible-reader h2')?.textContent?.trim() === 'John 3' && document.querySelectorAll('.chapter-text button').length >= 30)
   const verseCount = await page.locator('.chapter-text button').count()
   assert.ok(verseCount >= 30, `Expected John 3 verses; found ${verseCount}`)
   await page.locator('.chapter-text button').nth(15).click()
@@ -117,7 +139,7 @@ try {
   await page.getByRole('button', { name: 'Close details' }).click()
 
   await page.getByRole('combobox', { name: 'Bible translation' }).selectOption('KJV')
-  await page.waitForFunction(() => document.querySelectorAll('.chapter-text button').length === 36)
+  await page.waitForFunction(() => document.querySelector('.bible-reader > header span')?.textContent?.includes('King James Version') && document.querySelectorAll('.chapter-text button').length === 36)
   await page.locator('.chapter-text button').nth(15).click()
   assert.match(await page.getByRole('dialog').locator('.verse-focus').innerText(), /only begotten Son/)
   assert.match(await page.getByRole('dialog').locator('header p').innerText(), /King James Version/)
@@ -126,7 +148,7 @@ try {
   await page.screenshot({ path: bibleScreenshotPath, fullPage: true })
 
   await page.getByRole('combobox', { name: 'Bible translation' }).selectOption('BIB')
-  await page.waitForFunction(() => document.querySelectorAll('.chapter-text button').length === 36)
+  await page.waitForFunction(() => document.querySelector('.bible-reader > header span')?.textContent?.includes('Berean Interlinear Bible') && document.querySelectorAll('.chapter-text button').length === 36)
   assert.equal(await page.getByRole('combobox', { name: 'Bible book' }).locator('option').count(), 27)
   assert.match(await page.locator('.chapter-text button').nth(15).innerText(), /Οὕτως/)
 
@@ -136,7 +158,7 @@ try {
   await page.screenshot({ path: facsimileScreenshotPath, fullPage: true })
 
   await page.getByRole('combobox', { name: 'Bible translation' }).selectOption('WEB')
-  await page.waitForFunction(() => document.querySelectorAll('.chapter-text button').length > 0)
+  await page.waitForFunction(() => document.querySelector('.bible-reader > header span')?.textContent?.includes('World English Bible') && document.querySelectorAll('.chapter-text button').length > 0)
 
   const search = page.getByRole('textbox', { name: 'Global search' })
   await search.fill('Babylon')
@@ -158,6 +180,17 @@ try {
   await page.getByRole('link', { name: 'TruthNewsApp dashboard' }).click()
   await page.waitForSelector('.dashboard-grid')
   await page.screenshot({ path: screenshotPath, fullPage: true })
+
+  await page.getByRole('button', { name: 'Collapse sidebar' }).click()
+  await page.locator('.sidebar.collapsed').waitFor()
+  const collapsedBrandBounds = await page.locator('.brand-symbol .initial-letter').evaluate((element) => {
+    const brand = element.closest('.brand')?.getBoundingClientRect()
+    const initial = element.getBoundingClientRect()
+    return brand ? { brandTop: brand.top, brandBottom: brand.bottom, initialTop: initial.top, initialBottom: initial.bottom, width: initial.width, height: initial.height } : null
+  })
+  assert.ok(collapsedBrandBounds, 'Expected the collapsed sidebar initial to be visible')
+  assert.ok(collapsedBrandBounds.width > 20 && collapsedBrandBounds.height > 20, `Collapsed brand initial is clipped: ${JSON.stringify(collapsedBrandBounds)}`)
+  assert.ok(collapsedBrandBounds.initialBottom > collapsedBrandBounds.brandTop && collapsedBrandBounds.initialTop < collapsedBrandBounds.brandBottom, `Collapsed brand initial is outside its container: ${JSON.stringify(collapsedBrandBounds)}`)
 
   const security = await electronApp.evaluate(async ({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows()[0]

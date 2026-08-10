@@ -3,18 +3,20 @@ import Parser from 'rss-parser'
 import type { NewsArticle, SourceRecord, SyncStatus } from '../shared/types'
 import { database } from './database'
 
+type FeedTextValue = string | number | boolean | { _?: unknown } | null | undefined
+
 interface FeedItem {
-  title?: string
-  link?: string
-  guid?: string
-  isoDate?: string
-  pubDate?: string
-  creator?: string
-  author?: string
-  contentSnippet?: string
-  content?: string
-  categories?: string[]
-  enclosure?: { url?: string }
+  title?: FeedTextValue
+  link?: FeedTextValue
+  guid?: FeedTextValue
+  isoDate?: FeedTextValue
+  pubDate?: FeedTextValue
+  creator?: FeedTextValue
+  author?: FeedTextValue
+  contentSnippet?: FeedTextValue
+  content?: FeedTextValue
+  categories?: FeedTextValue[]
+  enclosure?: { url?: FeedTextValue }
 }
 
 const parser = new Parser({
@@ -25,7 +27,18 @@ const parser = new Parser({
   }
 })
 
-const stripMarkup = (value = ''): string => value
+const feedText = (value: unknown): string => {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (value && typeof value === 'object' && '_' in value) return feedText((value as { _: unknown })._)
+  return ''
+}
+
+export const normalizeFeedCategoryValues = (categories: unknown): string[] => Array.isArray(categories)
+  ? categories.map(feedText).map((value) => value.trim()).filter(Boolean)
+  : []
+
+const stripMarkup = (value: unknown = ''): string => feedText(value)
   .replace(/<script[\s\S]*?<\/script>/gi, ' ')
   .replace(/<style[\s\S]*?<\/style>/gi, ' ')
   .replace(/<[^>]+>/g, ' ')
@@ -36,10 +49,11 @@ const stripMarkup = (value = ''): string => value
   .replace(/\s+/g, ' ')
   .trim()
 
-const safeHttpsUrl = (value?: string): string | undefined => {
-  if (!value) return undefined
+const safeHttpsUrl = (value?: unknown): string | undefined => {
+  const text = feedText(value)
+  if (!text) return undefined
   try {
-    const url = new URL(value)
+    const url = new URL(text)
     return url.protocol === 'https:' ? url.toString() : undefined
   } catch {
     return undefined
@@ -47,7 +61,8 @@ const safeHttpsUrl = (value?: string): string | undefined => {
 }
 
 const classifyArticle = (item: FeedItem, source: SourceRecord): Pick<NewsArticle, 'category' | 'region' | 'country' | 'isOpinion' | 'tags'> => {
-  const text = `${item.title ?? ''} ${(item.categories ?? []).join(' ')}`.toLowerCase()
+  const categories = normalizeFeedCategoryValues(item.categories)
+  const text = `${feedText(item.title)} ${categories.join(' ')}`.toLowerCase()
   const isOpinion = /\b(opinion|commentary|editorial|analysis)\b/.test(text)
   let category = isOpinion ? 'Commentary' : 'World'
   let region = 'Global'
@@ -58,14 +73,14 @@ const classifyArticle = (item: FeedItem, source: SourceRecord): Pick<NewsArticle
   else if (/archaeolog|ancient|excavat/.test(text)) { category = 'Archaeology' }
   else if (/science|technology|artificial intelligence|space/.test(text)) { category = 'Science & Technology' }
   else if (/war|military|missile|conflict|ceasefire/.test(text)) { category = 'War & Military' }
-  return { category, region, country, isOpinion, tags: [...new Set([category, region, ...(item.categories ?? []).slice(0, 4)])] }
+  return { category, region, country, isOpinion, tags: [...new Set([category, region, ...categories.slice(0, 4)])] }
 }
 
 const normalizeItem = (item: FeedItem, source: SourceRecord, retrievedAt: string): NewsArticle | null => {
   const headline = stripMarkup(item.title).slice(0, 400)
   const originalUrl = safeHttpsUrl(item.link)
   if (!headline || !originalUrl) return null
-  const published = new Date(item.isoDate || item.pubDate || retrievedAt)
+  const published = new Date(feedText(item.isoDate) || feedText(item.pubDate) || retrievedAt)
   const publishedAt = Number.isNaN(published.getTime()) ? retrievedAt : published.toISOString()
   const classification = classifyArticle(item, source)
   const stableId = createHash('sha256').update(originalUrl).digest('hex').slice(0, 24)

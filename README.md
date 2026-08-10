@@ -2,6 +2,12 @@
 
 TruthNewsApp is an account-free, local-first Windows desktop application for reading Christian and conservative news beside Scripture, historical timelines, dispensational frameworks, and carefully qualified prophecy records.
 
+## Visual tour
+
+[Open the complete 33-image application showcase](docs/APP_SHOWCASE.md) to see the packaged Windows app from startup through every major page, drawer, theme, and navigation state.
+
+[![TruthNewsApp dark-gold dashboard](docs/screenshots/02-dashboard.jpg)](docs/APP_SHOWCASE.md)
+
 ## What works
 
 - Reference-matched dark-gold dashboard plus a white-gold theme
@@ -31,7 +37,10 @@ npm run typecheck
 npm test
 npm run build
 npm run test:e2e
+npm run capture:showcase
 ```
+
+Set `TRUTHNEWS_EXECUTABLE` to the packaged `TruthNewsApp.exe` before `npm run capture:showcase` to reproduce the repository screenshots from an isolated local profile.
 
 Build the Windows installer:
 

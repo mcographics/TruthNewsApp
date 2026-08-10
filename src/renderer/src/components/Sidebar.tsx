@@ -29,7 +29,7 @@ export const Sidebar = (): React.JSX.Element => {
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <NavLink to="/" className="brand" aria-label="TruthNewsApp dashboard">
         <div className="brand-symbol"><span className="initial-letter">T</span><BookOpenText className="brand-book" size={31} /></div>
-        {!collapsed && <div><strong>TruthNewsApp</strong><span>Truth. History. Prophecy. News.</span></div>}
+        {!collapsed && <div className="brand-copy"><strong>TruthNewsApp</strong><span>Truth. History. Prophecy. News.</span></div>}
       </NavLink>
       <nav className="primary-nav" aria-label="Main navigation">
         {NAV_ITEMS.map(({ to, label, icon: Icon }) => (

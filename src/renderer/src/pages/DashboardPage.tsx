@@ -46,7 +46,7 @@ export const DashboardPage = (): React.JSX.Element => {
 
   return (
     <div className="dashboard-grid">
-      <section className="hero-panel" style={{ backgroundImage: `linear-gradient(90deg, rgba(3,7,10,.94) 0%, rgba(3,7,10,.72) 34%, rgba(3,7,10,.08) 68%), url(${heroCross})` }}>
+      <section className="hero-panel" style={{ backgroundImage: `url(${heroCross})` }}>
         <div className="hero-copy"><span className="hero-kicker">Scripture · History · Current Events</span><h1>TRUTH<br />STANDS<br />FOREVER</h1><p>Accurate history.<br />Biblical truth.<br />Prophecy examined with care.</p><div className="hero-actions"><button className="gold-button filled" onClick={() => navigate('/timeline/master')}>Explore the master timeline <ChevronRight size={16} /></button><button className="text-button" onClick={() => navigate('/bible')}>Open Scripture</button></div></div>
       </section>
 
