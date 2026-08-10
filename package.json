@@ -1,0 +1,103 @@
+{
+  "name": "truthnewsapp",
+  "version": "0.1.0",
+  "description": "A local-first Christian historical intelligence desktop application.",
+  "main": "./out/main/index.js",
+  "author": "MCographics",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc --noEmit -p tsconfig.json && electron-vite build",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "test:e2e": "node scripts/e2e-smoke.mjs",
+    "dist:win": "tsc --noEmit -p tsconfig.json && electron-vite build && electron-builder --win nsis",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.1",
+    "rss-parser": "^3.13.0",
+    "sql.js": "^1.12.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@types/sql.js": "^1.4.9",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "39.8.10",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^3.0.0",
+    "playwright-core": "^1.49.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.6",
+    "vitest": "^4.1.10"
+  },
+  "build": {
+    "appId": "com.mcographics.truthnewsapp",
+    "productName": "TruthNewsApp",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "src/main/data",
+        "to": "data",
+        "filter": [
+          "engwebp_vpl.txt",
+          "engwebp_about.htm"
+        ]
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "EB-Garamond-Initials/COPYING",
+        "to": "licenses/EB-Garamond-Initials-OFL-1.1.txt"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/sql.js/dist/sql-wasm.wasm"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "TruthNewsApp-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TruthNewsApp"
+    }
+  },
+  "allowScripts": {
+    "electron@39.8.10": true,
+    "esbuild@0.25.12": true
+  }
+}
