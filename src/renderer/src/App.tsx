@@ -22,11 +22,11 @@ const App = (): React.JSX.Element => {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/news" element={<NewsPage />} />
-        <Route path="/timeline/master" element={<TimelinePage mode="master" />} />
-        <Route path="/timeline/prophecy" element={<TimelinePage mode="prophecy" />} />
-        <Route path="/timeline/bible" element={<TimelinePage mode="bible" />} />
-        <Route path="/timeline/history" element={<TimelinePage mode="history" />} />
-        <Route path="/jesus" element={<TimelinePage mode="jesus" />} />
+        <Route path="/timeline/master" element={<TimelinePage key="master" mode="master" />} />
+        <Route path="/timeline/prophecy" element={<TimelinePage key="prophecy" mode="prophecy" />} />
+        <Route path="/timeline/bible" element={<TimelinePage key="bible" mode="bible" />} />
+        <Route path="/timeline/history" element={<TimelinePage key="history" mode="history" />} />
+        <Route path="/jesus" element={<TimelinePage key="jesus" mode="jesus" />} />
         <Route path="/dispensations" element={<DispensationsPage />} />
         <Route path="/bible" element={<BiblePage />} />
         <Route path="/prophecies" element={<PropheciesPage />} />

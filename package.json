@@ -13,6 +13,7 @@
     "preview": "electron-vite preview",
     "test": "vitest run",
     "test:e2e": "node scripts/e2e-smoke.mjs",
+    "capture:showcase": "node scripts/capture-showcase.mjs",
     "dist:win": "tsc --noEmit -p tsconfig.json && electron-vite build && electron-builder --win nsis",
     "postinstall": "electron-builder install-app-deps"
   },
