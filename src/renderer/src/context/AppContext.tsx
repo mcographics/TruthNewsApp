@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type {
   AppSettings,
   BibleBook,
+  BibleTranslation,
   BookmarkInput,
   BootstrapData,
   NewsArticle,
@@ -14,6 +15,7 @@ interface AppContextValue extends BootstrapData {
   syncing: boolean
   error: string | null
   bibleBooks: BibleBook[]
+  bibleTranslations: BibleTranslation[]
   refreshNews: () => Promise<void>
   toggleBookmark: (input: BookmarkInput) => Promise<void>
   saveNote: (input: NoteInput) => Promise<void>
@@ -42,15 +44,17 @@ const errorMessage = (error: unknown): string => error instanceof Error ? error.
 export const AppProvider = ({ children }: { children: ReactNode }): React.JSX.Element => {
   const [data, setData] = useState<BootstrapData>(EMPTY_DATA)
   const [bibleBooks, setBibleBooks] = useState<BibleBook[]>([])
+  const [bibleTranslations, setBibleTranslations] = useState<BibleTranslation[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     try {
-      const [bootstrap, books] = await Promise.all([window.truthNews.getBootstrap(), window.truthNews.getBibleBooks()])
+      const [bootstrap, books, translations] = await Promise.all([window.truthNews.getBootstrap(), window.truthNews.getBibleBooks(), window.truthNews.getBibleTranslations()])
       setData(bootstrap)
       setBibleBooks(books)
+      setBibleTranslations(translations)
       setError(null)
     } catch (reason) {
       setError(errorMessage(reason))
@@ -147,9 +151,9 @@ export const AppProvider = ({ children }: { children: ReactNode }): React.JSX.El
   ), [data.bookmarks])
 
   const value = useMemo<AppContextValue>(() => ({
-    ...data, loading, syncing, error, bibleBooks, refreshNews, toggleBookmark, saveNote, updateSettings, updateSource,
+    ...data, loading, syncing, error, bibleBooks, bibleTranslations, refreshNews, toggleBookmark, saveNote, updateSettings, updateSource,
     clearNews, clearActivity, resetLocalData, reload, isBookmarked
-  }), [data, loading, syncing, error, bibleBooks, refreshNews, toggleBookmark, saveNote, updateSettings, updateSource, clearNews, clearActivity, resetLocalData, reload, isBookmarked])
+  }), [data, loading, syncing, error, bibleBooks, bibleTranslations, refreshNews, toggleBookmark, saveNote, updateSettings, updateSource, clearNews, clearActivity, resetLocalData, reload, isBookmarked])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

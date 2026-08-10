@@ -1,11 +1,13 @@
 import { app } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js'
 import type {
   AppSettings,
   BibleBook,
+  BibleTranslation,
   BibleVerse,
   BookmarkInput,
   BookmarkRecord,
@@ -40,6 +42,18 @@ const BIBLE_BOOKS: BibleBook[] = [
 
 interface SqlRow {
   [key: string]: string | number | null
+}
+
+interface TranslationManifest {
+  schemaVersion: number
+  translations: Array<Omit<BibleTranslation, 'loaded'> & { packFile: string | null; resourceFile: string | null }>
+}
+
+interface TranslationPack {
+  schemaVersion: number
+  code: string
+  verseCount: number
+  verses: Array<{ bookCode: string; chapter: number; verse: number; text: string }>
 }
 
 const toJson = (value: unknown): string => JSON.stringify(value)
@@ -99,13 +113,46 @@ export class TruthDatabase {
       );
       CREATE INDEX IF NOT EXISTS idx_news_published ON news_articles(published_at DESC);
       CREATE TABLE IF NOT EXISTS bible_books (code TEXT PRIMARY KEY, name TEXT NOT NULL, book_order INTEGER NOT NULL, chapters INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS bible_verses (id TEXT PRIMARY KEY, book_code TEXT NOT NULL, chapter INTEGER NOT NULL, verse INTEGER NOT NULL, end_verse INTEGER NOT NULL, text TEXT NOT NULL);
-      CREATE INDEX IF NOT EXISTS idx_bible_reference ON bible_verses(book_code, chapter, verse);
+      CREATE TABLE IF NOT EXISTS bible_translations (
+        code TEXT PRIMARY KEY,
+        abbreviation TEXT NOT NULL,
+        name TEXT NOT NULL,
+        format TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        rights TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        pack_file TEXT,
+        resource_file TEXT,
+        verse_count INTEGER NOT NULL,
+        book_codes TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS bible_verses (id TEXT PRIMARY KEY, translation_code TEXT NOT NULL DEFAULT 'WEB', book_code TEXT NOT NULL, chapter INTEGER NOT NULL, verse INTEGER NOT NULL, end_verse INTEGER NOT NULL, text TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS bookmarks (id TEXT PRIMARY KEY, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, title TEXT NOT NULL, subtitle TEXT NOT NULL, created_at TEXT NOT NULL, folder TEXT NOT NULL DEFAULT 'Saved', UNIQUE(entity_type, entity_id));
       CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, body TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(entity_type, entity_id));
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sync_logs (id TEXT PRIMARY KEY, service TEXT NOT NULL, attempted_at TEXT NOT NULL, succeeded INTEGER NOT NULL, message TEXT NOT NULL, successful_sources INTEGER NOT NULL, failed_sources INTEGER NOT NULL);
     `)
+    this.migrateBibleSchema()
+  }
+
+  private migrateBibleSchema(): void {
+    const columns = this.rows('PRAGMA table_info(bible_verses)').map((row) => String(row.name))
+    if (!columns.includes('translation_code')) {
+      this.connection.run('BEGIN TRANSACTION')
+      try {
+        this.connection.run('ALTER TABLE bible_verses RENAME TO bible_verses_legacy')
+        this.connection.run('CREATE TABLE bible_verses (id TEXT PRIMARY KEY, translation_code TEXT NOT NULL, book_code TEXT NOT NULL, chapter INTEGER NOT NULL, verse INTEGER NOT NULL, end_verse INTEGER NOT NULL, text TEXT NOT NULL)')
+        this.connection.run("INSERT INTO bible_verses (id, translation_code, book_code, chapter, verse, end_verse, text) SELECT 'WEB-' || id, 'WEB', book_code, chapter, verse, end_verse, text FROM bible_verses_legacy")
+        this.connection.run("UPDATE bookmarks SET entity_id = 'WEB-' || entity_id WHERE entity_type = 'verse' AND entity_id NOT LIKE 'WEB-%'")
+        this.connection.run("UPDATE notes SET entity_id = 'WEB-' || entity_id WHERE entity_type = 'verse' AND entity_id NOT LIKE 'WEB-%'")
+        this.connection.run('DROP TABLE bible_verses_legacy')
+        this.connection.run('COMMIT')
+      } catch (error) {
+        this.connection.run('ROLLBACK')
+        throw error
+      }
+    }
+    this.connection.run('CREATE INDEX IF NOT EXISTS idx_bible_reference ON bible_verses(translation_code, book_code, chapter, verse)')
   }
 
   private seedKnowledgeData(): void {
@@ -148,17 +195,47 @@ export class TruthDatabase {
       : join(process.cwd(), 'src', 'main', 'data', 'engwebp_vpl.txt')
   }
 
+  private translationDataDirectory(): string {
+    return app.isPackaged
+      ? join(process.resourcesPath, 'data', 'translations')
+      : join(process.cwd(), 'src', 'main', 'data', 'translations')
+  }
+
+  private translationManifest(): TranslationManifest {
+    const manifestPath = join(this.translationDataDirectory(), 'manifest.json')
+    if (!existsSync(manifestPath)) throw new Error(`Bible translation manifest not found: ${manifestPath}`)
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as TranslationManifest
+    if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.translations)) throw new Error('Unsupported Bible translation manifest')
+    return manifest
+  }
+
+  private seedBibleTranslations(): void {
+    const insert = this.connection.prepare(`INSERT OR REPLACE INTO bible_translations
+      (code, abbreviation, name, format, scope, rights, source_url, pack_file, resource_file, verse_count, book_codes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    try {
+      this.translationManifest().translations.forEach((translation) => insert.run([
+        translation.code, translation.abbreviation, translation.name, translation.format, translation.scope, translation.rights,
+        translation.sourceUrl, translation.packFile ?? null, translation.resourceFile ?? null, translation.verseCount,
+        toJson(translation.bookCodes)
+      ]))
+    } finally {
+      insert.free()
+    }
+  }
+
   private seedBible(): void {
     this.connection.run('DELETE FROM bible_books')
     BIBLE_BOOKS.forEach((book) => {
       this.connection.run('INSERT OR REPLACE INTO bible_books (code, name, book_order, chapters) VALUES (?, ?, ?, ?)', [book.code, book.name, book.order, book.chapters])
     })
-    if (this.scalar('SELECT COUNT(*) AS count FROM bible_verses') > 0) return
+    this.seedBibleTranslations()
+    if (this.scalar("SELECT COUNT(*) AS count FROM bible_verses WHERE translation_code = 'WEB'") > 0) return
 
     const sourcePath = this.bibleDataPath()
     if (!existsSync(sourcePath)) throw new Error(`World English Bible data not found: ${sourcePath}`)
     const lines = readFileSync(sourcePath, 'utf8').split(/\r?\n/)
-    const insert = this.connection.prepare('INSERT OR REPLACE INTO bible_verses (id, book_code, chapter, verse, end_verse, text) VALUES (?, ?, ?, ?, ?, ?)')
+    const insert = this.connection.prepare('INSERT OR REPLACE INTO bible_verses (id, translation_code, book_code, chapter, verse, end_verse, text) VALUES (?, ?, ?, ?, ?, ?, ?)')
     this.connection.run('BEGIN TRANSACTION')
     try {
       for (const line of lines) {
@@ -168,7 +245,7 @@ export class TruthDatabase {
         const chapter = Number(chapterText)
         const verse = Number(verseText)
         const endVerse = endVerseText ? Number(endVerseText) : verse
-        insert.run([`${bookCode}-${chapter}-${verse}`, bookCode, chapter, verse, endVerse, verseContent.trim()])
+        insert.run([`WEB-${bookCode}-${chapter}-${verse}`, 'WEB', bookCode, chapter, verse, endVerse, verseContent.trim()])
       }
       this.connection.run('COMMIT')
     } catch (error) {
@@ -341,11 +418,55 @@ export class TruthDatabase {
     return this.rows('SELECT code, name, book_order, chapters FROM bible_books ORDER BY book_order').map((row) => ({ code: String(row.code), name: String(row.name), order: Number(row.book_order), chapters: Number(row.chapters) }))
   }
 
-  getBibleChapter(bookCode: string, chapter: number): BibleVerse[] {
-    return this.rows(`SELECT v.*, b.name AS book_name FROM bible_verses v JOIN bible_books b ON b.code = v.book_code WHERE v.book_code = ? AND v.chapter = ? ORDER BY v.verse`, [bookCode, chapter]).map(this.mapVerse)
+  getBibleTranslations(): BibleTranslation[] {
+    return this.rows(`SELECT t.*, (SELECT COUNT(*) FROM bible_verses v WHERE v.translation_code = t.code) AS loaded_count
+      FROM bible_translations t ORDER BY CASE t.code WHEN 'WEB' THEN 0 ELSE 1 END, t.name`).map((row) => ({
+      code: String(row.code), abbreviation: String(row.abbreviation), name: String(row.name), format: String(row.format) as BibleTranslation['format'],
+      scope: String(row.scope), rights: String(row.rights), sourceUrl: String(row.source_url), packFile: row.pack_file ? String(row.pack_file) : undefined,
+      resourceFile: row.resource_file ? String(row.resource_file) : undefined, verseCount: Number(row.verse_count),
+      bookCodes: fromJson<string[]>(row.book_codes), loaded: String(row.format) === 'facsimile' || Number(row.loaded_count) > 0
+    }))
   }
 
-  searchBible(query: string, limit = 100): BibleVerse[] {
+  private ensureTranslationLoaded(translationCode: string): void {
+    if (this.scalar('SELECT COUNT(*) AS count FROM bible_verses WHERE translation_code = ?', [translationCode]) > 0) return
+    const row = this.getRow('SELECT format, pack_file FROM bible_translations WHERE code = ?', [translationCode])
+    if (!row) throw new Error(`Unknown Bible translation: ${translationCode}`)
+    if (String(row.format) !== 'text' || !row.pack_file) throw new Error(`${translationCode} is a facsimile resource, not searchable verse text`)
+    const packFile = basename(String(row.pack_file))
+    if (!packFile.endsWith('.json.gz')) throw new Error(`Invalid translation pack name: ${packFile}`)
+    const packPath = join(this.translationDataDirectory(), packFile)
+    if (!existsSync(packPath)) throw new Error(`Bible translation pack not found: ${packPath}`)
+    const pack = JSON.parse(gunzipSync(readFileSync(packPath)).toString('utf8')) as TranslationPack
+    if (pack.schemaVersion !== 1 || pack.code !== translationCode || !Array.isArray(pack.verses) || pack.verses.length !== pack.verseCount) {
+      throw new Error(`Bible translation pack failed validation: ${translationCode}`)
+    }
+    const insert = this.connection.prepare('INSERT OR REPLACE INTO bible_verses (id, translation_code, book_code, chapter, verse, end_verse, text) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    this.connection.run('BEGIN TRANSACTION')
+    try {
+      pack.verses.forEach((verse) => insert.run([
+        `${translationCode}-${verse.bookCode}-${verse.chapter}-${verse.verse}`, translationCode, verse.bookCode,
+        verse.chapter, verse.verse, verse.verse, verse.text
+      ]))
+      this.connection.run('COMMIT')
+    } catch (error) {
+      this.connection.run('ROLLBACK')
+      throw error
+    } finally {
+      insert.free()
+    }
+    this.save()
+  }
+
+  getBibleChapter(translationCode: string, bookCode: string, chapter: number): BibleVerse[] {
+    this.ensureTranslationLoaded(translationCode)
+    return this.rows(`SELECT v.*, b.name AS book_name, t.name AS translation_name, t.abbreviation AS translation_abbreviation
+      FROM bible_verses v JOIN bible_books b ON b.code = v.book_code JOIN bible_translations t ON t.code = v.translation_code
+      WHERE v.translation_code = ? AND v.book_code = ? AND v.chapter = ? ORDER BY v.verse`, [translationCode, bookCode, chapter]).map(this.mapVerse)
+  }
+
+  searchBible(translationCode: string, query: string, limit = 100): BibleVerse[] {
+    this.ensureTranslationLoaded(translationCode)
     const cleaned = query.trim()
     const reference = /^(.+?)\s+(\d+)(?::(\d+))?$/i.exec(cleaned)
     if (reference) {
@@ -353,18 +474,31 @@ export class TruthDatabase {
       const book = BIBLE_BOOKS.find((candidate) => candidate.name.toLowerCase() === bookName.toLowerCase() || candidate.code.toLowerCase() === bookName.toLowerCase())
       if (book) {
         const chapter = Number(chapterText)
-        const rows = this.getBibleChapter(book.code, chapter)
+        const rows = this.getBibleChapter(translationCode, book.code, chapter)
         return verseText ? rows.filter((verse) => verse.verse === Number(verseText) || (verse.verse <= Number(verseText) && verse.endVerse >= Number(verseText))) : rows
       }
     }
     if (cleaned.length < 2) return []
-    return this.rows(`SELECT v.*, b.name AS book_name FROM bible_verses v JOIN bible_books b ON b.code = v.book_code WHERE v.text LIKE ? ORDER BY b.book_order, v.chapter, v.verse LIMIT ?`, [`%${cleaned}%`, limit]).map(this.mapVerse)
+    return this.rows(`SELECT v.*, b.name AS book_name, t.name AS translation_name, t.abbreviation AS translation_abbreviation
+      FROM bible_verses v JOIN bible_books b ON b.code = v.book_code JOIN bible_translations t ON t.code = v.translation_code
+      WHERE v.translation_code = ? AND v.text LIKE ? ORDER BY b.book_order, v.chapter, v.verse LIMIT ?`, [translationCode, `%${cleaned}%`, limit]).map(this.mapVerse)
   }
 
   private mapVerse = (row: SqlRow): BibleVerse => ({
-    id: String(row.id), bookCode: String(row.book_code), bookName: String(row.book_name), chapter: Number(row.chapter), verse: Number(row.verse), endVerse: Number(row.end_verse), text: String(row.text),
+    id: String(row.id), translationCode: String(row.translation_code), translationName: String(row.translation_name), translationAbbreviation: String(row.translation_abbreviation),
+    bookCode: String(row.book_code), bookName: String(row.book_name), chapter: Number(row.chapter), verse: Number(row.verse), endVerse: Number(row.end_verse), text: String(row.text),
     reference: `${String(row.book_name)} ${Number(row.chapter)}:${Number(row.verse)}${Number(row.end_verse) !== Number(row.verse) ? `–${Number(row.end_verse)}` : ''}`
   })
+
+  getBibleResourcePath(translationCode: string): string {
+    const row = this.getRow('SELECT format, resource_file FROM bible_translations WHERE code = ?', [translationCode])
+    if (!row || String(row.format) !== 'facsimile' || !row.resource_file) throw new Error('Unknown Bible facsimile resource')
+    const resourceFile = basename(String(row.resource_file))
+    if (!resourceFile.toLowerCase().endsWith('.pdf')) throw new Error('Invalid Bible facsimile resource')
+    const resourcePath = join(this.translationDataDirectory(), resourceFile)
+    if (!existsSync(resourcePath)) throw new Error(`Bible facsimile not found: ${resourcePath}`)
+    return resourcePath
+  }
 
   getSyncStatus(online: boolean): SyncStatus {
     const row = this.getRow("SELECT * FROM sync_logs WHERE service = 'news' ORDER BY attempted_at DESC LIMIT 1")
@@ -399,7 +533,12 @@ export class TruthDatabase {
     this.rows('SELECT id, title, reference, classification FROM prophecies WHERE title LIKE ? OR reference LIKE ? OR payload LIKE ? LIMIT 12', [needle, needle, needle]).forEach((row) => results.push({ id: `prophecy-${row.id}`, type: 'prophecy', title: String(row.title), subtitle: `${row.reference} · ${row.classification}`, route: '/prophecies', entityId: String(row.id) }))
     this.rows('SELECT id, headline, publisher, published_at FROM news_articles WHERE headline LIKE ? OR summary LIKE ? LIMIT 12', [needle, needle]).forEach((row) => results.push({ id: `news-${row.id}`, type: 'news', title: String(row.headline), subtitle: `${row.publisher} · ${row.published_at}`, route: '/news', entityId: String(row.id) }))
     this.rows('SELECT id, name, status FROM dispensations WHERE name LIKE ? OR payload LIKE ? LIMIT 8', [needle, needle]).forEach((row) => results.push({ id: `disp-${row.id}`, type: 'dispensation', title: String(row.name), subtitle: `${row.status} · Chosen theological framework`, route: '/dispensations', entityId: String(row.id) }))
-    this.searchBible(cleaned, 12).forEach((verse) => results.push({ id: `verse-${verse.id}`, type: 'verse', title: verse.reference, subtitle: verse.text, route: `/bible?book=${verse.bookCode}&chapter=${verse.chapter}&verse=${verse.verse}`, entityId: verse.id }))
+    const preferredBible = this.getSettings().defaultBible
+    const searchableBible = this.getBibleTranslations().some((translation) => translation.code === preferredBible && translation.format === 'text') ? preferredBible : 'WEB'
+    this.searchBible(searchableBible, cleaned, 12).forEach((verse) => results.push({
+      id: `verse-${verse.id}`, type: 'verse', title: `${verse.reference} · ${verse.translationAbbreviation}`, subtitle: verse.text,
+      route: `/bible?translation=${verse.translationCode}&book=${verse.bookCode}&chapter=${verse.chapter}&verse=${verse.verse}`, entityId: verse.id
+    }))
     return results.slice(0, 40)
   }
 

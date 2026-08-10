@@ -347,7 +347,9 @@ select { min-height: 34px; color: var(--text); background: var(--panel-2); borde
 .bible-toolbar > label { display: flex; flex-direction: column; gap: 4px; }
 .bible-toolbar > label span { color: var(--muted); font-size: 10px; }
 .bible-toolbar select { min-width: 170px; }
-.bible-toolbar > label:nth-child(2) select { min-width: 90px; }
+.bible-toolbar > label:first-child select { min-width: 260px; max-width: 330px; }
+.bible-toolbar > label:nth-child(2) select { min-width: 145px; }
+.bible-toolbar > label:nth-child(3) select { min-width: 90px; }
 .bible-search { flex: 1; display: flex; align-items: center; gap: 9px; height: 40px; padding-left: 12px; border: 1px solid var(--line); border-radius: 5px; }
 .bible-search > input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--text); }
 .bible-search .gold-button { border-width: 0 0 0 1px; border-radius: 0; height: 38px; }
@@ -372,6 +374,18 @@ select { min-height: 34px; color: var(--text); background: var(--panel-2); borde
 .bible-license { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 11px 15px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); }
 .bible-license p { margin: 0; }
 .bible-license svg { color: var(--gold); }
+.bible-license .text-button { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.inline-error { margin: 0 0 10px; padding: 11px 14px; border: 1px solid rgba(223,93,85,.45); border-radius: 6px; background: rgba(223,93,85,.09); color: var(--danger); }
+.translation-loading { min-height: 310px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; border: 1px solid var(--line-gold); border-radius: 8px; background: var(--panel); color: var(--muted); }
+.translation-loading svg { width: 36px; height: 36px; color: var(--gold); animation: translation-spin 1.1s linear infinite; }
+.translation-loading strong { color: var(--text); font: 22px var(--serif); }
+.facsimile-panel { min-height: 360px; display: grid; grid-template-columns: 100px minmax(0, 700px); justify-content: center; align-content: center; gap: 28px; padding: 45px; }
+.facsimile-panel > svg { width: 88px; height: 88px; color: var(--gold); }
+.facsimile-panel h2 { font: 27px var(--serif); margin-bottom: 9px; }
+.facsimile-panel p { color: var(--text-soft); line-height: 1.65; }
+.facsimile-panel .rights-note { color: var(--muted); font-size: 12px; }
+.facsimile-panel .gold-button { display: inline-flex; align-items: center; gap: 7px; }
+@keyframes translation-spin { to { transform: rotate(360deg); } }
 .verse-focus { margin: 15px 0; padding: 18px; border-left: 3px solid var(--gold); background: var(--gold-faint); font: 22px/1.7 var(--serif); }
 
 .prophecy-filter, .source-controls { min-height: 58px; display: flex; align-items: center; gap: 7px; padding: 9px 12px; margin-bottom: 10px; overflow-x: auto; }

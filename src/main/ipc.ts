@@ -21,7 +21,11 @@ const validateSettingsPatch = (value: unknown): Partial<AppSettings> => {
   if ('timezone' in input) patch.timezone = stringValue(input.timezone, 100)
   if ('country' in input) patch.country = stringValue(input.country, 80)
   if ('language' in input) patch.language = stringValue(input.language, 80)
-  if ('defaultBible' in input) patch.defaultBible = stringValue(input.defaultBible, 40)
+  if ('defaultBible' in input) {
+    const code = stringValue(input.defaultBible, 12).toUpperCase()
+    if (!database.getBibleTranslations().some((translation) => translation.code === code && translation.format === 'text')) throw new Error('Invalid default Bible translation')
+    patch.defaultBible = code
+  }
   if ('dateFormat' in input) patch.dateFormat = input.dateFormat === 'short' ? 'short' : 'long'
   if ('reducedMotion' in input) patch.reducedMotion = Boolean(input.reducedMotion)
   if ('sidebarCollapsed' in input) patch.sidebarCollapsed = Boolean(input.sidebarCollapsed)
@@ -33,12 +37,20 @@ export const registerIpcHandlers = (onSettingsUpdated: () => void = () => undefi
   ipcMain.handle('truth:refresh-news', () => refreshNewsFeeds(net.isOnline()))
   ipcMain.handle('truth:search', (_event, query: unknown) => database.search(stringValue(query, 160)))
   ipcMain.handle('truth:get-bible-books', () => database.getBibleBooks())
-  ipcMain.handle('truth:get-bible-chapter', (_event, bookCode: unknown, chapter: unknown) => {
+  ipcMain.handle('truth:get-bible-translations', () => database.getBibleTranslations())
+  ipcMain.handle('truth:get-bible-chapter', (_event, translationCode: unknown, bookCode: unknown, chapter: unknown) => {
+    const translation = stringValue(translationCode, 12).toUpperCase()
     const code = stringValue(bookCode, 4).toUpperCase()
     const chapterNumber = Math.min(150, Math.max(1, Math.round(Number(chapter) || 1)))
-    return database.getBibleChapter(code, chapterNumber)
+    return database.getBibleChapter(translation, code, chapterNumber)
   })
-  ipcMain.handle('truth:search-bible', (_event, query: unknown) => database.searchBible(stringValue(query, 160)))
+  ipcMain.handle('truth:search-bible', (_event, translationCode: unknown, query: unknown) => database.searchBible(stringValue(translationCode, 12).toUpperCase(), stringValue(query, 160)))
+  ipcMain.handle('truth:open-bible-resource', async (_event, translationCode: unknown) => {
+    const resourcePath = database.getBibleResourcePath(stringValue(translationCode, 12).toUpperCase())
+    const error = await shell.openPath(resourcePath)
+    if (error) throw new Error(error)
+    return true
+  })
   ipcMain.handle('truth:toggle-bookmark', (_event, input: unknown) => {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid bookmark')
     const value = input as Record<string, unknown>

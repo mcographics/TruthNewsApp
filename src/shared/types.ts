@@ -121,8 +121,26 @@ export interface BibleBook {
   chapters: number
 }
 
+export interface BibleTranslation {
+  code: string
+  abbreviation: string
+  name: string
+  format: 'text' | 'facsimile'
+  scope: string
+  rights: string
+  sourceUrl: string
+  packFile?: string
+  resourceFile?: string
+  verseCount: number
+  bookCodes: string[]
+  loaded: boolean
+}
+
 export interface BibleVerse {
   id: string
+  translationCode: string
+  translationName: string
+  translationAbbreviation: string
   bookCode: string
   bookName: string
   chapter: number
@@ -212,8 +230,10 @@ export interface TruthNewsApi {
   refreshNews: () => Promise<{ news: NewsArticle[]; sources: SourceRecord[]; sync: SyncStatus }>
   search: (query: string) => Promise<SearchResult[]>
   getBibleBooks: () => Promise<BibleBook[]>
-  getBibleChapter: (bookCode: string, chapter: number) => Promise<BibleVerse[]>
-  searchBible: (query: string) => Promise<BibleVerse[]>
+  getBibleTranslations: () => Promise<BibleTranslation[]>
+  getBibleChapter: (translationCode: string, bookCode: string, chapter: number) => Promise<BibleVerse[]>
+  searchBible: (translationCode: string, query: string) => Promise<BibleVerse[]>
+  openBibleResource: (translationCode: string) => Promise<boolean>
   toggleBookmark: (input: BookmarkInput) => Promise<BookmarkRecord[]>
   saveNote: (input: NoteInput) => Promise<NoteRecord[]>
   updateSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>
